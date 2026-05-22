@@ -17,26 +17,44 @@
 #include <stdio.h>
 #include <string.h>
 
+#define HISTORY_SIZE 100
+char *history[HISTORY_SIZE];
+int history_count = 0 ; 
+
 /*
   Function Declarations for builtin shell commands:
  */
 int lsh_cd(char **args);
 int lsh_help(char **args);
 int lsh_exit(char **args);
-
+int lsh_pwd(char **args); 
+int lsh_echo(char **args);
+int lsh_history(char **args); 
+int lsh_unset(char **args);
+int lsh_export(char **args); 
 /*
   List of builtin commands, followed by their corresponding functions.
  */
 char *builtin_str[] = {
   "cd",
   "help",
-  "exit"
+  "exit",
+  "pwd",
+  "echo",
+  "history",
+  "unset",
+  "export"
 };
 
 int (*builtin_func[]) (char **) = {
   &lsh_cd,
   &lsh_help,
-  &lsh_exit
+  &lsh_exit,
+  &lsh_pwd,
+  &lsh_echo,
+  &lsh_history,
+  &lsh_unset,
+  &lsh_export
 };
 
 int lsh_num_builtins() {
@@ -147,10 +165,84 @@ int lsh_execute(char **args)
   return lsh_launch(args);
 }
 
-/**
-   @brief Read a line of input from stdin.
-   @return The line from stdin.
- */
+
+int lsh_pwd(char **args)
+{
+  char cwd[1024];
+
+  if (getcwd(cwd, sizeof(cwd)) != NULL) {
+    printf("%s\n", cwd);
+  } else {
+    perror("lsh");
+  }
+
+  return 1;
+}
+
+int lsh_echo(char **args)
+{
+  int i = 1;
+
+  while (args[i] != NULL) {
+    if (args[i][0] == '$') {
+      char *var_name = args[i] + 1; 
+      char *var_value = getenv(var_name);
+      
+      if (var_value != NULL) {
+        printf("%s", var_value);
+      }
+      
+    } else {
+      printf("%s", args[i]);
+    }
+
+    if (args[i + 1] != NULL) {
+      printf(" ");
+    }
+
+    i++;
+  }
+
+  printf("\n");
+  return 1;
+}
+int lsh_history(char **args)
+{
+  int i;
+
+  for (i = 0; i < history_count; i++) {
+    printf("%d %s\n", i + 1, history[i]);
+  }
+
+  return 1;
+}
+
+int lsh_unset(char **args)
+{
+  if (args[1] == NULL) {
+    fprintf(stderr, "lsh: expected argument to \"unset\"\n");
+  } else {
+    if (unsetenv(args[1]) != 0) {
+      perror("lsh");
+    }
+  }
+
+  return 1;
+}
+
+int lsh_export(char **args)
+{
+  if (args[1] == NULL || args[2] == NULL) {
+    fprintf(stderr, "lsh: expected usage: export VARNAME VALUE\n");
+  } else {
+    if (setenv(args[1], args[2], 1) != 0) {
+      perror("lsh");
+    }
+  }
+  return 1;
+}
+
+
 char *lsh_read_line(void)
 {
 #ifdef LSH_USE_STD_GETLINE
@@ -165,6 +257,7 @@ char *lsh_read_line(void)
     }
   }
   return line;
+
 #else
 #define LSH_RL_BUFSIZE 1024
   int bufsize = LSH_RL_BUFSIZE;
@@ -256,6 +349,10 @@ void lsh_loop(void)
   do {
     printf("> ");
     line = lsh_read_line();
+    if (history_count < HISTORY_SIZE) {
+        history[history_count] = strdup(line);
+        history_count++;
+    }
     args = lsh_split_line(line);
     status = lsh_execute(args);
 
@@ -281,4 +378,3 @@ int main(int argc, char **argv)
 
   return EXIT_SUCCESS;
 }
-
